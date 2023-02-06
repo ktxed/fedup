@@ -1,0 +1,49 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'fedup'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=fedup",
+                    "--package=fedup"
+                ],
+                "filter": {
+                    "name": "fedup",
+                    "kind": "bin"
+                }
+            },
+            "args": [
+                "--folder",
+                "d:\\poze\\n73\\03.2009"
+            ],
+            "cwd": "${workspaceFolder}",
+            "sourceMap": { "\\rustc\\69f9c33d71c871fc16ac445211281c6e7a340943" : "C:\\Users\\ktx\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\lib\\rustlib\\src\\rust"}
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'fedup'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=fedup",
+                    "--package=fedup"
+                ],
+                "filter": {
+                    "name": "fedup",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
