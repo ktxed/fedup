@@ -1,7 +1,6 @@
 use std::fs::{self, DirEntry};
-use std::io;
+use std::io::{self, ErrorKind};
 use std::path::Path;
-
 
 fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
     if dir.is_dir() {
@@ -14,19 +13,24 @@ fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
                 cb(&entry);
             }
         }
+    } else {
+        return Err(io::Error::new(ErrorKind::Other, "Path is not a folder"));
     }
     Ok(())
 }
 
 pub fn scan(folder: &String) -> () {
-    println!("Starting scanning folder {}", folder);
+    println!("Starting scanning folder: {}", folder);
 
     let cb = |entry: &DirEntry| {
         println!("{}", entry.path().display());
+        if let Ok(metadata) = entry.metadata() {
+            println!("\tfilesize: {}", metadata.len());
+        }
     };
 
     match visit_dirs(Path::new(folder), &cb) {
         Ok(_) => println!("Scanning finished"),
-        Err(_) => println!("Error scanning"),
+        Err(error) => println!("{}", error),
     }
 }
