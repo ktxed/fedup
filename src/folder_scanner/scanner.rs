@@ -1,6 +1,9 @@
 use std::fs::{self, DirEntry};
 use std::io::{self, ErrorKind};
 use std::path::Path;
+use crossbeam_channel::Sender;
+use log::info;
+use crate::folder_scanner::file_info::FileInfo;
 
 fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
     if dir.is_dir() {
@@ -19,18 +22,24 @@ fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
     Ok(())
 }
 
-pub fn scan(folder: &String) -> () {
-    println!("Starting scanning folder: {}", folder);
+pub fn scan(folder: &String, sender: &Sender<FileInfo>) -> () {
+    info!("Starting scanning folder: {}", folder);
 
     let cb = |entry: &DirEntry| {
-        println!("{}", entry.path().display());
         if let Ok(metadata) = entry.metadata() {
-            println!("\tfilesize: {}", metadata.len());
+            let file_info = FileInfo {
+                file: entry.path().display().to_string(), 
+                size: metadata.len()
+            };
+            match sender.send(file_info) {
+                Ok(_) => (),
+                Err(error) => info!("Problem sending message: {}", error),
+            }
         }
     };
 
     match visit_dirs(Path::new(folder), &cb) {
-        Ok(_) => println!("Scanning finished"),
+        Ok(_) => info!("Scanning finished"),
         Err(error) => println!("{}", error),
     }
 }
