@@ -3,7 +3,7 @@ mod folder_scanner;
 use std::thread;
 use clap::Parser;
 use crossbeam_channel::unbounded;
-use log::info;
+use log::{info, error};
 
 #[derive(Parser, Debug)]
 #[command()]
@@ -24,6 +24,20 @@ fn main() {
     });
     
     scanner_thread.join();
-    collector_thread.join();
+    
+    let (s, r) = unbounded();
+
+    match collector_thread.join() {
+        Ok(collector_result) => {
+            match s.send(collector_result) {
+                Ok(_) => (),
+                Err(_) => error!("Failed sending message"),
+            }
+        }
+        Err(error) => error!("Collector failed {:?}", error)
+    }
+
+    folder_scanner::deduplicator::deduplicate(r).join();
+
     info!("Exiting...");
 }

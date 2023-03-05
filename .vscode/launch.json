@@ -21,7 +21,7 @@
             },
             "args": [
                 "--folder",
-                "d:/work"
+                "d:\\poze\\n73\\"
             ],
             "env": {
                 "RUST_LOG": "info"
