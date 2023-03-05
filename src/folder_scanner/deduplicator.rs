@@ -1,9 +1,7 @@
 use std::{
-    collections::HashMap,
     thread::{self, JoinHandle}, sync::{Arc, atomic::AtomicUsize},
 };
 
-use atomic_counter::{RelaxedCounter, AtomicCounter};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use log::info;
 
@@ -35,7 +33,6 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>) -> JoinHandle<()> {
                 
                 children.into_iter()
                 .for_each(|t| {
-                    info!("counter {},  waiting for t", counter.load(std::sync::atomic::Ordering::SeqCst));
                     t.join();
                     ();
                 });
@@ -57,17 +54,18 @@ fn fun_name(r: Receiver<Vec<FileInfo>>, children: &mut Vec<JoinHandle<()>>, tota
         let atomic_counter_c = Arc::clone(&val);
         let receiver = r.clone();
         let worker = thread::spawn(move || {
-            info!("Started new deduplicateur thread");
+            let thread_id = thread::current().id();
+            info!("{:?} Started new deduplicateur thread", thread_id);
             loop {
                 match receiver.recv() {
                     Ok(result) => {          
                         atomic_counter_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                        info!("{} - Processing pair with len {}", i, result.len());
+                        info!("{:?} - Processing pair with len {}", thread_id, result.len());
                     },
                     Err(_) => break,
                 }
                 if total == atomic_counter_c.load(std::sync::atomic::Ordering::SeqCst) {
-                    info!("Not waiting for new messages");
+                    info!("{:?}: Not waiting for new messages", thread_id);
                     break;
                 }
             }
