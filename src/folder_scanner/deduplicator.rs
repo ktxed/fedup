@@ -57,7 +57,7 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>) -> JoinHandle<()> {
 }
 
 fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
-    for i in 0..3 {
+    for _ in 0..3 {
         let receiver = r.clone();
         let worker = thread::spawn(move || {
             let thread_id = thread::current().id();
@@ -76,8 +76,8 @@ fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
 
                             let samples = file_infos
                                 .iter()
-                                .filter_map(|finfo| extract_sample(finfo))
-                                .filter_map(|sample| hash_sample(sample))
+                                .filter_map(extract_sample)
+                                .filter_map(hash_sample)
                                 .collect::<Vec<HashedSample>>();
 
                             info!("{:?} - Sampled {} files", thread_id, samples.len());
@@ -128,7 +128,7 @@ fn extract_sample(file_info: &FileInfo) -> Option<Sample> {
                 for i in 0..PIECES {
                     debug!("{:?} - Extracting sample {}", thread_id, i);
 
-                    let mut buffer_slice = &mut sample_buffer
+                    let buffer_slice = &mut sample_buffer
                         [i * PIECE_SIZE_KIB * 1024..(i + 1) * PIECE_SIZE_KIB * 1024];
                     handle
                         .seek(SeekFrom::Start(
