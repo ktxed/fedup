@@ -76,12 +76,8 @@ fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
 
                             let samples = file_infos
                                 .iter()
-                                .map(|finfo| extract_sample(finfo))
-                                .filter(|sample| sample.is_some())
-                                .map(|sample| sample.unwrap())
-                                .map(|sample| hash_sample(sample))
-                                .filter(|hs| hs.is_some())
-                                .map(|hs| hs.unwrap())
+                                .filter_map(|finfo| extract_sample(finfo))
+                                .filter_map(|sample| hash_sample(sample))
                                 .collect::<Vec<HashedSample>>();
 
                             info!("{:?} - Sampled {} files", thread_id, samples.len());
