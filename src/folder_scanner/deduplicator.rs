@@ -1,24 +1,19 @@
 use std::{
+    fs::{read, File},
+    io::{Read, Seek, SeekFrom},
     thread::{self, JoinHandle},
 };
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use log::info;
-
-use crate::folder_scanner;
-
+use log::{debug, info, warn};
 use super::{collector::CollectorResult, file_info::FileInfo};
 
 enum Message {
-    Request { 
-        file_info: Vec<FileInfo>
-    },
-    Terminate
+    Request { file_info: Vec<FileInfo> },
+    Terminate,
 }
 
-pub struct DeduplicatorResult {
-    
-}
+pub struct DeduplicatorResult {}
 
 struct PairDeduplicatorResult {}
 
@@ -30,33 +25,32 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>) -> JoinHandle<()> {
         match receiver.recv() {
             Ok(message) => {
                 let mut children = Vec::new();
-                
+
                 fun_name(r, &mut children);
 
-                message.buckets.into_iter()
-                    .for_each(|dup_pair| {
-                        s.send(Message::Request { file_info: dup_pair });
-                        ();
-                    });
+                message.buckets.into_iter().for_each(|dup_pair| {
+                    s.send(Message::Request {
+                        file_info: dup_pair,
+                    }).unwrap_or_default();
+                    ();
+                });
 
                 // signalling worker threads to gracefully close
                 for i in 0..3 {
-                    s.send(Message::Terminate);
+                    s.send(Message::Terminate).unwrap_or_default();
                 }
 
-                
-                children.into_iter()
-                .for_each(|t| {
-                    t.join();
+                children.into_iter().for_each(|t| {
+                    t.join().unwrap_or_default();
                     ();
                 });
-                
-                DeduplicatorResult { };
+
+                DeduplicatorResult {};
             }
             Err(_) => todo!(),
         }
 
-        DeduplicatorResult { };
+        DeduplicatorResult {};
     });
 
     return worker;
@@ -70,15 +64,31 @@ fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
             info!("{:?} Started new deduplicateur thread", thread_id);
             loop {
                 match receiver.recv() {
-                    Ok(result) => {
-                        match result {          
-                            Message::Request { file_info } => {
-                                info!("{:?} - Processing pair with len {}", thread_id, file_info.len());
-                            },
-                            Message::Terminate => {
-                                info!("{:?} Quitting", thread_id);
-                                break
-                            },
+                    Ok(result) => match result {
+                        Message::Request {
+                            file_info: file_infos,
+                        } => {
+                            info!(
+                                "{:?} - Processing pair with len {}",
+                                thread_id,
+                                file_infos.len()
+                            );
+
+                            let samples = file_infos
+                                .iter()
+                                .map(|finfo| extract_sample(finfo))
+                                .filter(|sample| sample.is_some())
+                                .map(|sample| sample.unwrap())
+                                .map(|sample| hash_sample(sample))
+                                .filter(|hs| hs.is_some())
+                                .map(|hs| hs.unwrap())
+                                .collect::<Vec<HashedSample>>();
+
+                            info!("{:?} - Sampled {} files", thread_id, samples.len());
+                        }
+                        Message::Terminate => {
+                            info!("{:?} - Quitting", thread_id);
+                            break;
                         }
                     },
                     Err(_) => break,
@@ -86,5 +96,82 @@ fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
             }
         });
         children.push(worker);
-    };
+    }
+}
+
+const PIECES: usize = 8;
+const PIECE_SIZE_KIB: usize = 10;
+
+struct Sample {
+    bytes: Vec<u8>,
+}
+
+struct HashedSample {
+    sample: Sample,
+    hash: u8,
+}
+
+fn extract_sample(file_info: &FileInfo) -> Option<Sample> {
+    let thread_id = thread::current().id();
+    let total_size = file_info.size;
+
+
+    // if file size is larger than 512 KiB we sample 8 pieces of max 10 KiB
+    // otherwise the sample is the file itself
+    if (total_size <= 512 * 1024) {
+        let sample = match read(file_info.file.clone()) {
+            Ok(sample) => Option::Some(Sample { bytes: sample }),
+            Err(_) => Option::None,
+        };
+        return sample;
+    } else {
+        match File::open(&file_info.file) {
+            Ok(mut handle) => {
+                let mut sample_buffer = [0u8; PIECES * PIECE_SIZE_KIB * 1024];
+
+                for i in 0..PIECES {
+                    debug!("{:?} - Extracting sample {}", thread_id, i);
+
+                    let mut buffer_slice = &mut sample_buffer
+                        [i * PIECE_SIZE_KIB * 1024..(i + 1) * PIECE_SIZE_KIB * 1024];
+                    handle
+                        .seek(SeekFrom::Start(
+                            (i * PIECE_SIZE_KIB * 1024).try_into().unwrap(),
+                        ))
+                        .unwrap_or(0);
+
+                    match handle.read(buffer_slice) {
+                        Ok(total_read) => debug!(
+                            "{:?} - Read {} bytes from {} to buffer {}",
+                            thread_id,
+                            total_read,
+                            file_info.file,
+                            buffer_slice.len()
+                        ),
+                        Err(error) => warn!(
+                            "{:?} - Failed reading from {}: {}",
+                            thread_id, file_info.file, error
+                        ),
+                    }
+                }
+                return Option::Some(Sample {
+                    bytes: Vec::from(sample_buffer),
+                });
+            }
+            Err(error) => {
+                warn!(
+                    "{:?} - Opening {} failed: {}",
+                    thread_id, file_info.file, error
+                );
+                Option::None
+            }
+        }
+    }
+}
+
+fn hash_sample(sample: Sample) -> Option<HashedSample> {
+    return Option::Some(HashedSample {
+        sample: sample,
+        hash: 5,
+    });
 }
