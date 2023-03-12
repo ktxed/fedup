@@ -4,9 +4,11 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use crossbeam_channel::{unbounded, Receiver, Sender};
-use log::{debug, info, warn};
 use super::{collector::CollectorResult, file_info::FileInfo};
+use crossbeam_channel::{unbounded, Receiver, Sender};
+use data_encoding::HEXLOWER;
+use log::{debug, info, warn};
+use ring::digest::{Context, SHA256};
 
 enum Message {
     Request { file_info: Vec<FileInfo> },
@@ -16,6 +18,8 @@ enum Message {
 pub struct DeduplicatorResult {}
 
 struct PairDeduplicatorResult {}
+
+const max_workers: usize = 3;
 
 pub fn deduplicate(receiver: Receiver<CollectorResult>) -> JoinHandle<()> {
     let (s, r): (Sender<Message>, Receiver<Message>) = unbounded();
@@ -31,12 +35,13 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>) -> JoinHandle<()> {
                 message.buckets.into_iter().for_each(|dup_pair| {
                     s.send(Message::Request {
                         file_info: dup_pair,
-                    }).unwrap_or_default();
+                    })
+                    .unwrap_or_default();
                     ();
                 });
 
                 // signalling worker threads to gracefully close
-                for i in 0..3 {
+                for i in 0..max_workers {
                     s.send(Message::Terminate).unwrap_or_default();
                 }
 
@@ -57,7 +62,7 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>) -> JoinHandle<()> {
 }
 
 fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
-    for _ in 0..3 {
+    for _ in 0..max_workers {
         let receiver = r.clone();
         let worker = thread::spawn(move || {
             let thread_id = thread::current().id();
@@ -81,6 +86,13 @@ fn fun_name(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>) -> () {
                                 .collect::<Vec<HashedSample>>();
 
                             info!("{:?} - Sampled {} files", thread_id, samples.len());
+
+                            samples.into_iter().for_each(|e| {
+                                debug!(
+                                    "file: {}:{} bytes, sample hash: {}",
+                                    e.sample.file_info.file, e.sample.file_info.size, e.hash
+                                );
+                            })
                         }
                         Message::Terminate => {
                             info!("{:?} - Quitting", thread_id);
@@ -99,24 +111,27 @@ const PIECES: usize = 8;
 const PIECE_SIZE_KIB: usize = 10;
 
 struct Sample {
+    file_info: FileInfo,
     bytes: Vec<u8>,
 }
 
 struct HashedSample {
     sample: Sample,
-    hash: u8,
+    hash: String,
 }
 
 fn extract_sample(file_info: &FileInfo) -> Option<Sample> {
     let thread_id = thread::current().id();
     let total_size = file_info.size;
 
-
     // if file size is larger than 512 KiB we sample 8 pieces of max 10 KiB
     // otherwise the sample is the file itself
     if (total_size <= 512 * 1024) {
         let sample = match read(file_info.file.clone()) {
-            Ok(sample) => Option::Some(Sample { bytes: sample }),
+            Ok(sample) => Option::Some(Sample {
+                file_info: file_info.clone(),
+                bytes: sample,
+            }),
             Err(_) => Option::None,
         };
         return sample;
@@ -151,6 +166,7 @@ fn extract_sample(file_info: &FileInfo) -> Option<Sample> {
                     }
                 }
                 return Option::Some(Sample {
+                    file_info: file_info.clone(),
                     bytes: Vec::from(sample_buffer),
                 });
             }
@@ -166,8 +182,11 @@ fn extract_sample(file_info: &FileInfo) -> Option<Sample> {
 }
 
 fn hash_sample(sample: Sample) -> Option<HashedSample> {
+    let mut context = Context::new(&SHA256);
+    context.update(&sample.bytes);
+    let digest = context.finish();
     return Option::Some(HashedSample {
         sample: sample,
-        hash: 5,
+        hash: HEXLOWER.encode(digest.as_ref()),
     });
 }
