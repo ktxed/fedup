@@ -1,4 +1,4 @@
-#[derive(Eq, Hash, PartialEq, Clone)]
+#[derive(Clone)]
 pub struct FileInfo {
     pub file: String,
     pub size: u64

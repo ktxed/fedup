@@ -1,9 +1,11 @@
 mod folder_scanner;
 
-use std::thread;
+use std::{thread, sync::{Arc, Mutex}, time};
 use clap::Parser;
 use crossbeam_channel::unbounded;
 use log::{info, error};
+
+use crate::folder_scanner::{duplicates_group::DuplicatesGroup, duplicates_result_processor::{DeduplicatorResultProcessor, ResultProcessor}};
 
 #[derive(Parser, Debug)]
 #[command()]
@@ -37,7 +39,12 @@ fn main() {
         Err(error) => error!("Collector failed {:?}", error)
     }
 
-    folder_scanner::deduplicator::deduplicate(r).join();
+    let (ss, result_receiver ) = unbounded();
 
+    let processor = DeduplicatorResultProcessor { receiver: result_receiver };
+    folder_scanner::deduplicator::deduplicate(r, &ss).join();
+
+    processor.start().join();
+    
     info!("Exiting...");
 }

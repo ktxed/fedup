@@ -24,7 +24,7 @@
                 "d:\\poze\\n73\\"
             ],
             "env": {
-                "RUST_LOG": "debug"
+                "RUST_LOG": "info"
             },
             "cwd": "${workspaceFolder}",
             "sourceMap": { "\\rustc\\69f9c33d71c871fc16ac445211281c6e7a340943" : "C:\\Users\\ktx\\.rustup\\toolchains\\stable-x86_64-pc-windows-msvc\\lib\\rustlib\\src\\rust"}
