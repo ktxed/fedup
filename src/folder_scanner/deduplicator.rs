@@ -4,12 +4,16 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use super::{collector::CollectorResult, file_info::FileInfo, duplicates_group::{Sample, HashedSample, DuplicatesGroup}};
+use super::{
+    collector::CollectorResult,
+    duplicates_group::{DuplicatesGroup, HashedSample, Sample},
+    file_info::FileInfo,
+};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use data_encoding::HEXLOWER;
+use grouping_by::GroupingBy;
 use log::{debug, info, warn};
 use ring::digest::{Context, SHA256};
-use grouping_by::GroupingBy;
 
 enum Message {
     Request { file_info: Vec<FileInfo> },
@@ -18,7 +22,10 @@ enum Message {
 
 const max_workers: usize = 3;
 
-pub fn deduplicate(receiver: Receiver<CollectorResult>, result_publisher: &Sender<Option<DuplicatesGroup>>) -> JoinHandle<()> {
+pub fn deduplicate(
+    receiver: Receiver<CollectorResult>,
+    result_publisher: &Sender<Option<DuplicatesGroup>>,
+) -> JoinHandle<()> {
     let (s, r): (Sender<Message>, Receiver<Message>) = unbounded();
     let publisher = result_publisher.clone();
     let worker = thread::spawn(move || {
@@ -47,9 +54,9 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>, result_publisher: &Sende
                     ();
                 });
 
-                info!("Signal end to publisher");
+                debug!("Signal end to publisher");
                 publisher.send(None);
-              }
+            }
             Err(_) => todo!(),
         }
     });
@@ -57,13 +64,17 @@ pub fn deduplicate(receiver: Receiver<CollectorResult>, result_publisher: &Sende
     return worker;
 }
 
-fn handle_message(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>, result_publisher: &Sender<Option<DuplicatesGroup>>) -> () {
+fn handle_message(
+    r: Receiver<Message>,
+    children: &mut Vec<JoinHandle<()>>,
+    result_publisher: &Sender<Option<DuplicatesGroup>>,
+) -> () {
     for _ in 0..max_workers {
         let receiver = r.clone();
         let publisher = result_publisher.clone();
         let worker = thread::spawn(move || {
             let thread_id = thread::current().id();
-            debug!("{:?} Started new deduplicateur thread", thread_id);
+            info!("{:?} Started new deduplicator thread", thread_id);
             loop {
                 match receiver.recv() {
                     Ok(result) => match result {
@@ -81,33 +92,30 @@ fn handle_message(r: Receiver<Message>, children: &mut Vec<JoinHandle<()>>, resu
                                 .filter_map(extract_sample)
                                 .filter_map(hash_sample)
                                 .collect::<Vec<HashedSample>>();
-                              
-                            // info!("{:?} - Sampled {} files", thread_id, samples.len());
-                            
+
+                            debug!("{:?} - Sampled {} files", thread_id, samples.len());
+
                             let grouped_samples = samples
-                                .iter()
-                                .grouping_by(|s| s.hash.clone());
-                                                    
-                            let duplicate_samples = grouped_samples.values()
                                 .into_iter()
-                                .filter(|value| value.len() > 1)
-                                .collect::<Vec<&Vec<&HashedSample>>>();
-                        
-                            if (duplicate_samples.len() > 1) {
-                                duplicate_samples.into_iter()
+                                .grouping_by(|s| s.hash.clone());
+
+                            grouped_samples.values()
+                                .into_iter()
+                                .filter(|v| v.len() > 1)
                                 .for_each(|g| {
-                                    let duplicates_group_vec = g.into_iter()
+                                let duplicates_group_vec = g
+                                    .into_iter()
                                     .map(|x| (*x).clone())
                                     .collect::<Vec<HashedSample>>();
-                                    let duplicates_group = DuplicatesGroup { item: duplicates_group_vec };
-                                    info!("Found duplicate");
-                                    publisher.send(Some(duplicates_group));
-                                })
-
-                            }
+                                let duplicates_group = DuplicatesGroup {
+                                    item: duplicates_group_vec,
+                                };
+                                debug!("Found duplicate");
+                                publisher.send(Some(duplicates_group)).unwrap();
+                            })
                         }
                         Message::Terminate => {
-                            info!("{:?} - Quitting", thread_id);
+                            debug!("{:?} - Quitting", thread_id);
                             break;
                         }
                     },

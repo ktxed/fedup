@@ -29,8 +29,8 @@ pub fn init(receiver: Receiver<FileInfo>) -> JoinHandle<CollectorResult> {
         info!("Consumed {} files. Filtering...", counter);
         let filtered = filter_potential_duplicates(buckets);
         info!("Found {} potential duplicate pairs", filtered.len());
-        let collector = CollectorResult { buckets: filtered };
-        return collector;
+        let result = CollectorResult { buckets: filtered };
+        return result;
     });
     return worker;
 }
