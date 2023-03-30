@@ -1,8 +1,9 @@
 mod folder_scanner;
 
 use std::{thread, sync::{Arc, Mutex}, time};
-use clap::Parser;
+use clap::{ Parser };
 use crossbeam_channel::unbounded;
+use folder_scanner::duplicates_result_processor::Action;
 use log::{info, error};
 
 use crate::folder_scanner::{duplicates_group::DuplicatesGroup, duplicates_result_processor::{DeduplicatorResultProcessor, ResultProcessor}};
@@ -12,6 +13,9 @@ use crate::folder_scanner::{duplicates_group::DuplicatesGroup, duplicates_result
 struct Args {
     #[arg(short, long)]
     folder: String,
+    
+    #[arg(short, long, value_enum)]
+    action: Action,
 }
 
 #[warn(unused_must_use)]
@@ -20,6 +24,10 @@ fn main() {
 
     let (s, r) = unbounded();
     let args = Args::parse();
+
+    info!("Input folder {}", args.folder);
+    info!("Action for duplicates: {:?}", args.action);
+
     let collector_thread = folder_scanner::collector::init(r);
     let scanner_thread = thread::spawn(move || {
         folder_scanner::scanner::scan(&args.folder, &s);

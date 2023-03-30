@@ -3,6 +3,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+use clap::{Parser, ValueEnum};
 use crossbeam_channel::Receiver;
 use log::{error, info};
 
@@ -14,6 +15,12 @@ pub struct DeduplicatorResultProcessor {
 
 pub trait ResultProcessor {
     fn start(&self) -> JoinHandle<()>;
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum Action {
+    Move,
+    Delete
 }
 
 fn listen(r: Receiver<Option<DuplicatesGroup>>) {
