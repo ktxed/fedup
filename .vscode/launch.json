@@ -21,9 +21,11 @@
             },
             "args": [
                 "--folder",
-                "d:/poze/s21/Facebook",
+                "d:/work/tmp",
                 "--action",
-                "move"
+                "move",
+                "--destination-folder",
+                "d:\\work\\temp"
             ],
             "env": {
                 "RUST_LOG": "info"

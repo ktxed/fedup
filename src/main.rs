@@ -1,12 +1,17 @@
 mod folder_scanner;
 
-use std::{thread, sync::{Arc, Mutex}, time};
-use clap::{ Parser };
+use std::thread;
+use clap::{ Parser, ValueEnum };
 use crossbeam_channel::unbounded;
-use folder_scanner::duplicates_result_processor::Action;
 use log::{info, error};
 
-use crate::folder_scanner::{duplicates_group::DuplicatesGroup, duplicates_result_processor::{DeduplicatorResultProcessor, ResultProcessor}};
+use crate::folder_scanner::{duplicates_result_processor::{DeduplicatorResultProcessor, ResultProcessor, ActionInput}};
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum Action {
+    Move,
+    Delete
+}
 
 #[derive(Parser, Debug)]
 #[command()]
@@ -16,6 +21,9 @@ struct Args {
     
     #[arg(short, long, value_enum)]
     action: Action,
+
+    #[arg(short, long)]
+    destination_folder: String,
 }
 
 #[warn(unused_must_use)]
@@ -49,10 +57,18 @@ fn main() {
 
     let (ss, result_receiver ) = unbounded();
 
-    let processor = DeduplicatorResultProcessor { receiver: result_receiver };
     folder_scanner::deduplicator::deduplicate(r, &ss).join();
 
-    processor.start().join();
+    let processor: DeduplicatorResultProcessor = DeduplicatorResultProcessor::start(result_receiver)
+        .join()
+        .unwrap();
+
+    let action = match args.action {
+        Action::Move => ActionInput::from(Action::Move, args.destination_folder),
+        Action::Delete => todo!(),
+    };
+
+    processor.apply(action);
     
     info!("Exiting...");
 }

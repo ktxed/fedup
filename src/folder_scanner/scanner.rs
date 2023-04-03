@@ -1,6 +1,7 @@
 use std::fs::{self, DirEntry};
 use std::io::{self, ErrorKind};
 use std::path::Path;
+use std::time::SystemTime;
 use crossbeam_channel::Sender;
 use log::info;
 use crate::folder_scanner::file_info::FileInfo;
@@ -29,7 +30,8 @@ pub fn scan(folder: &String, sender: &Sender<FileInfo>) -> () {
         if let Ok(metadata) = entry.metadata() {
             let file_info = FileInfo {
                 file: entry.path().display().to_string(), 
-                size: metadata.len()
+                size: metadata.len(),
+                date: metadata.created().unwrap_or(SystemTime::UNIX_EPOCH)
             };
             match sender.send(file_info) {
                 Ok(_) => (),
