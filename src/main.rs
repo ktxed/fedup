@@ -10,6 +10,7 @@ use crate::folder_scanner::{duplicates_result_processor::{DeduplicatorResultProc
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Action {
     Move,
+    Report,
     Delete
 }
 
@@ -64,7 +65,8 @@ fn main() {
         .unwrap();
 
     let action = match args.action {
-        Action::Move => ActionInput::from(Action::Move, args.destination_folder),
+        Action::Move => ActionInput::from(Action::Move, Some(args.destination_folder)),
+        Action::Report => ActionInput::from(Action::Report, None),
         Action::Delete => todo!(),
     };
 

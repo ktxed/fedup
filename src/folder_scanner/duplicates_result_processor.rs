@@ -1,14 +1,14 @@
 use std::{
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle}, path::Path, fs,
 };
 
 use clap::{ValueEnum, builder::Str};
 use crossbeam_channel::Receiver;
-use log::{error, info};
+use log::{error, info, warn};
 
 use crate::Action;
-
-use super::duplicates_group::DuplicatesGroup;
+use data_encoding::BASE64;
+use super::duplicates_group::{DuplicatesGroup, HashedSample};
 
 pub struct DeduplicatorResultProcessor {
     pub duplicates: Vec<DuplicatesGroup>
@@ -26,12 +26,17 @@ pub struct MoveParams {
 
 #[derive(Debug)]
 pub enum ActionInput {
-    Move(MoveParams)
+    Move(MoveParams),
+    Report
 }
 
 impl ActionInput {
-    pub fn from(action: Action, folder: String) -> Self {
-        ActionInput::Move{ 0: MoveParams { destination_folder: folder }}
+    pub fn from(action: Action, folder: Option<String>) -> Self {
+        match action {
+            Action::Move => ActionInput::Move{ 0: MoveParams { destination_folder: folder.unwrap() }},
+            Action::Report => ActionInput::Report,
+            Action::Delete => todo!(),
+        }
     }
 }
 
@@ -69,13 +74,47 @@ impl DeduplicatorResultProcessor {
  * base64 encode original file name and path and move it to the destination folder
  * the older file in a group is left in its original location
  */
-fn moveDuplicates(duplicates: &Vec<DuplicatesGroup>, destination_folder: &str) -> () {
+fn move_duplicates(duplicates: &Vec<DuplicatesGroup>, destination_folder: &str) -> () {
     info!("Moving duplicates to {}", destination_folder);
-    duplicates.iter()
+    duplicates.into_iter()
     .for_each(|group| {
-        // sort group by creation date, ascending
-        // and skip first element
+        let i = reorder_group(group.item.to_vec());
+        i.iter().skip(1).for_each(|item| {
+            let input_file_path = item.sample.file_info.file.clone();
+            let b64name = BASE64.encode(input_file_path.as_bytes());
+            let target_file_path = Path::new(destination_folder).join(b64name);
+            let input_path = Path::new(&item.sample.file_info.file);
+            move_file(input_path, target_file_path.as_path());
+        })
     })
+}
+
+// sort group by ascending path in order to keep files with the shortest paths
+// can be changed to order files by date in order to move only newer duplicates
+fn reorder_group(mut group: Vec<HashedSample>) -> Vec<HashedSample> {
+    group.sort_by_key(|hs| hs.sample.file_info.file.len());     
+    group
+}
+
+fn report_duplicates(duplicates: &Vec<DuplicatesGroup>) -> () {
+    info!("Duplicates summary. There are {} duplicate groups", duplicates.len());
+    duplicates.into_iter()
+    .for_each(|group| {
+        info!("Displaying duplicate group with {} items...", group.item.len());
+        let i = reorder_group(group.item.to_vec());
+        info!("To keep: {}", i[0].sample.file_info.file);
+        i.iter().skip(1).for_each(|item| {
+            info!("To move: {}", item.sample.file_info.file);
+        })
+    })
+}
+
+fn move_file(input_file_path: &Path, target_file_path: &Path) {
+    info!("Moving {} to {}", input_file_path.to_string_lossy(), target_file_path.to_string_lossy());
+    match fs::rename(input_file_path, target_file_path) {
+        Ok(_) => info!("Moved."),
+        Err(error) => warn!("Move failed: {}", error)
+    };
 }
 
 impl ResultProcessor<DeduplicatorResultProcessor> for DeduplicatorResultProcessor {
@@ -93,7 +132,8 @@ impl ResultProcessor<DeduplicatorResultProcessor> for DeduplicatorResultProcesso
         }
         info!("Applying action {:?} for {} duplicate pairs", action, self.duplicates.len());
         match action {
-            ActionInput::Move(params) => moveDuplicates(&self.duplicates, &params.destination_folder)
+            ActionInput::Move(params) => move_duplicates(&self.duplicates, &params.destination_folder),
+            ActionInput::Report => report_duplicates(&self.duplicates)
         }
         return  None;
     }
