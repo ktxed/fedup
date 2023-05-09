@@ -19,3 +19,30 @@ This list should be provided in either json format or a simple flat file of file
 The aim is to produce a multithreaded application.
 
 Since is this is a toy app, stopping/resuming (which would imply saving state) is not really a necessary feature. And the input file folders are assumed to be static so we don't have to watch them being update while an ongoing scan takes place.
+
+## Usage
+
+You can also run the app without any arguments to obtain the most up to date usage instrunctions.
+
+```
+fedup --folder $input_folder --action move|report --destination-folder $destination_folder
+```
+
+You need to provide an input folder where you suspect that duplicates are contained and action - i.e. what should the app do with the duplicates. If your choice is to move the duplicates to another folder, you must also provide it.
+
+Duplicate files are moved to the target destination but their name will become the base64 string representing the full original path (without any extension). This is to potentially enable reverting them:
+
+```
+original file path -> base64encode -> $destination-folder\$base64string
+```
+
+The _report_ action only displays which files will be kept and which files can be moved for the _move_ action.
+
+## Bugs (to be fixed)
+
+- [ ] handling of `RUST_LOG` environment variable
+- [ ] make `destination-folder` argument optional for the `report` action
+
+## Next steps
+
+- [] add (some) tests
