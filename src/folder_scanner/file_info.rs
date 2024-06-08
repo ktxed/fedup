@@ -4,5 +4,5 @@ use std::time::SystemTime;
 pub struct FileInfo {
     pub file: String,
     pub size: u64,
-    pub date: SystemTime
+    pub date: SystemTime,
 }

@@ -20,7 +20,7 @@ enum Message {
     Terminate,
 }
 
-const max_workers: usize = 3;
+const MAX_WORKERS: usize = 3;
 
 pub fn deduplicate(
     receiver: Receiver<CollectorResult>,
@@ -45,7 +45,7 @@ pub fn deduplicate(
                 });
 
                 // signalling worker threads to gracefully close
-                for i in 0..max_workers {
+                for i in 0..MAX_WORKERS {
                     s.send(Message::Terminate).unwrap_or_default();
                 }
 
@@ -55,7 +55,7 @@ pub fn deduplicate(
                 });
 
                 debug!("Signal end to publisher");
-                publisher.send(None);
+                publisher.send(None).expect("Publishing failed");
             }
             Err(_) => todo!(),
         }
@@ -69,7 +69,7 @@ fn handle_message(
     children: &mut Vec<JoinHandle<()>>,
     result_publisher: &Sender<Option<DuplicatesGroup>>,
 ) -> () {
-    for _ in 0..max_workers {
+    for _ in 0..MAX_WORKERS {
         let receiver = r.clone();
         let publisher = result_publisher.clone();
         let worker = thread::spawn(move || {
@@ -95,24 +95,24 @@ fn handle_message(
 
                             debug!("{:?} - Sampled {} files", thread_id, samples.len());
 
-                            let grouped_samples = samples
-                                .into_iter()
-                                .grouping_by(|s| s.hash.clone());
+                            let grouped_samples =
+                                samples.into_iter().grouping_by(|s| s.hash.clone());
 
-                            grouped_samples.values()
+                            grouped_samples
+                                .values()
                                 .into_iter()
                                 .filter(|v| v.len() > 1)
                                 .for_each(|g| {
-                                let duplicates_group_vec = g
-                                    .into_iter()
-                                    .map(|x| (*x).clone())
-                                    .collect::<Vec<HashedSample>>();
-                                let duplicates_group = DuplicatesGroup {
-                                    item: duplicates_group_vec,
-                                };
-                                debug!("Found duplicate");
-                                publisher.send(Some(duplicates_group)).unwrap();
-                            })
+                                    let duplicates_group_vec = g
+                                        .into_iter()
+                                        .map(|x| (*x).clone())
+                                        .collect::<Vec<HashedSample>>();
+                                    let duplicates_group = DuplicatesGroup {
+                                        item: duplicates_group_vec,
+                                    };
+                                    debug!("Found duplicate");
+                                    publisher.send(Some(duplicates_group)).unwrap();
+                                })
                         }
                         Message::Terminate => {
                             debug!("{:?} - Quitting", thread_id);
@@ -196,7 +196,7 @@ fn hash_sample(sample: Sample) -> Option<HashedSample> {
     context.update(&sample.bytes);
     let digest = context.finish();
     return Option::Some(HashedSample {
-        sample: sample,
+        sample,
         hash: HEXLOWER.encode(digest.as_ref()),
     });
 }

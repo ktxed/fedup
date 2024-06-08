@@ -7,7 +7,7 @@ use std::{
 };
 
 pub struct CollectorResult {
-    pub buckets: Vec<Vec<FileInfo>>
+    pub buckets: Vec<Vec<FileInfo>>,
 }
 
 pub fn init(receiver: Receiver<FileInfo>) -> JoinHandle<CollectorResult> {
@@ -36,7 +36,8 @@ pub fn init(receiver: Receiver<FileInfo>) -> JoinHandle<CollectorResult> {
 }
 
 fn filter_potential_duplicates(buckets: HashMap<u64, Vec<FileInfo>>) -> Vec<Vec<FileInfo>> {
-    return buckets.into_iter()
+    return buckets
+        .into_iter()
         .filter(|entry| entry.1.len() > 1)
         .map(|entry| entry.1)
         .collect::<Vec<_>>();

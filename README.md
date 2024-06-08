@@ -40,7 +40,7 @@ The _report_ action only displays which files will be kept and which files can b
 
 ## Bugs (to be fixed)
 
-- [ ] handling of `RUST_LOG` environment variable
+- [x] handling of `RUST_LOG` environment variable (is hardcoded now)
 - [ ] make `destination-folder` argument optional for the `report` action
 
 ## Next steps

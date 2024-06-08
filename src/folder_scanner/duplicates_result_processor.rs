@@ -1,17 +1,19 @@
 use std::{
-    thread::{self, JoinHandle}, path::Path, fs,
+    fs,
+    path::Path,
+    thread::{self, JoinHandle},
 };
 
-use clap::{ValueEnum, builder::Str};
+use clap::{builder::Str, ValueEnum};
 use crossbeam_channel::Receiver;
 use log::{error, info, warn};
 
+use super::duplicates_group::{DuplicatesGroup, HashedSample};
 use crate::Action;
 use data_encoding::BASE64;
-use super::duplicates_group::{DuplicatesGroup, HashedSample};
 
 pub struct DeduplicatorResultProcessor {
-    pub duplicates: Vec<DuplicatesGroup>
+    pub duplicates: Vec<DuplicatesGroup>,
 }
 
 pub trait ResultProcessor<T> {
@@ -21,19 +23,23 @@ pub trait ResultProcessor<T> {
 
 #[derive(Clone, Debug)]
 pub struct MoveParams {
-    destination_folder: String
+    destination_folder: String,
 }
 
 #[derive(Debug)]
 pub enum ActionInput {
     Move(MoveParams),
-    Report
+    Report,
 }
 
 impl ActionInput {
     pub fn from(action: Action, folder: Option<String>) -> Self {
         match action {
-            Action::Move => ActionInput::Move{ 0: MoveParams { destination_folder: folder.unwrap() }},
+            Action::Move => ActionInput::Move {
+                0: MoveParams {
+                    destination_folder: folder.unwrap(),
+                },
+            },
             Action::Report => ActionInput::Report,
             Action::Delete => todo!(),
         }
@@ -65,7 +71,7 @@ fn listen(r: Receiver<Option<DuplicatesGroup>>) -> Vec<DuplicatesGroup> {
 impl DeduplicatorResultProcessor {
     fn new(duplicates: Vec<DuplicatesGroup>) -> Self {
         DeduplicatorResultProcessor {
-            duplicates: duplicates
+            duplicates: duplicates,
         }
     }
 }
@@ -76,8 +82,7 @@ impl DeduplicatorResultProcessor {
  */
 fn move_duplicates(duplicates: &Vec<DuplicatesGroup>, destination_folder: &str) -> () {
     info!("Moving duplicates to {}", destination_folder);
-    duplicates.into_iter()
-    .for_each(|group| {
+    duplicates.into_iter().for_each(|group| {
         let i = reorder_group(group.item.to_vec());
         i.iter().skip(1).for_each(|item| {
             let input_file_path = item.sample.file_info.file.clone();
@@ -92,15 +97,20 @@ fn move_duplicates(duplicates: &Vec<DuplicatesGroup>, destination_folder: &str) 
 // sort group by ascending path in order to keep files with the shortest paths
 // can be changed to order files by date in order to move only newer duplicates
 fn reorder_group(mut group: Vec<HashedSample>) -> Vec<HashedSample> {
-    group.sort_by_key(|hs| hs.sample.file_info.file.len());     
+    group.sort_by_key(|hs| hs.sample.file_info.file.len());
     group
 }
 
 fn report_duplicates(duplicates: &Vec<DuplicatesGroup>) -> () {
-    info!("Duplicates summary. There are {} duplicate groups", duplicates.len());
-    duplicates.into_iter()
-    .for_each(|group| {
-        info!("Displaying duplicate group with {} items...", group.item.len());
+    info!(
+        "Duplicates summary. There are {} duplicate groups",
+        duplicates.len()
+    );
+    duplicates.into_iter().for_each(|group| {
+        info!(
+            "Displaying duplicate group with {} items...",
+            group.item.len()
+        );
         let i = reorder_group(group.item.to_vec());
         info!("To keep: {}", i[0].sample.file_info.file);
         i.iter().skip(1).for_each(|item| {
@@ -110,15 +120,21 @@ fn report_duplicates(duplicates: &Vec<DuplicatesGroup>) -> () {
 }
 
 fn move_file(input_file_path: &Path, target_file_path: &Path) {
-    info!("Moving {} to {}", input_file_path.to_string_lossy(), target_file_path.to_string_lossy());
+    info!(
+        "Moving {} to {}",
+        input_file_path.to_string_lossy(),
+        target_file_path.to_string_lossy()
+    );
     match fs::rename(input_file_path, target_file_path) {
         Ok(_) => info!("Moved."),
-        Err(error) => warn!("Move failed: {}", error)
+        Err(error) => warn!("Move failed: {}", error),
     };
 }
 
 impl ResultProcessor<DeduplicatorResultProcessor> for DeduplicatorResultProcessor {
-    fn start(receiver: Receiver<Option<DuplicatesGroup>>) -> JoinHandle<DeduplicatorResultProcessor> {
+    fn start(
+        receiver: Receiver<Option<DuplicatesGroup>>,
+    ) -> JoinHandle<DeduplicatorResultProcessor> {
         let r = receiver.clone();
         let listener = thread::spawn(move || {
             info!("Started processor");
@@ -130,12 +146,17 @@ impl ResultProcessor<DeduplicatorResultProcessor> for DeduplicatorResultProcesso
         if self.duplicates.len() == 0 {
             return None;
         }
-        info!("Applying action {:?} for {} duplicate pairs", action, self.duplicates.len());
+        info!(
+            "Applying action {:?} for {} duplicate pairs",
+            action,
+            self.duplicates.len()
+        );
         match action {
-            ActionInput::Move(params) => move_duplicates(&self.duplicates, &params.destination_folder),
-            ActionInput::Report => report_duplicates(&self.duplicates)
+            ActionInput::Move(params) => {
+                move_duplicates(&self.duplicates, &params.destination_folder)
+            }
+            ActionInput::Report => report_duplicates(&self.duplicates),
         }
-        return  None;
+        return None;
     }
 }
-

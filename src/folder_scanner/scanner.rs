@@ -1,10 +1,10 @@
+use crate::folder_scanner::file_info::FileInfo;
+use crossbeam_channel::Sender;
+use log::info;
 use std::fs::{self, DirEntry};
 use std::io::{self, ErrorKind};
 use std::path::Path;
 use std::time::SystemTime;
-use crossbeam_channel::Sender;
-use log::info;
-use crate::folder_scanner::file_info::FileInfo;
 
 fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
     if dir.is_dir() {
@@ -29,9 +29,9 @@ pub fn scan(folder: &String, sender: &Sender<FileInfo>) -> () {
     let cb = |entry: &DirEntry| {
         if let Ok(metadata) = entry.metadata() {
             let file_info = FileInfo {
-                file: entry.path().display().to_string(), 
+                file: entry.path().display().to_string(),
                 size: metadata.len(),
-                date: metadata.created().unwrap_or(SystemTime::UNIX_EPOCH)
+                date: metadata.created().unwrap_or(SystemTime::UNIX_EPOCH),
             };
             match sender.send(file_info) {
                 Ok(_) => (),

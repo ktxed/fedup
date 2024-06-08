@@ -14,5 +14,5 @@ pub struct HashedSample {
 
 #[derive(Clone)]
 pub struct DuplicatesGroup {
-    pub item: Vec<HashedSample>
+    pub item: Vec<HashedSample>,
 }
